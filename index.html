@@ -139,7 +139,7 @@
     </div>
 </div>
 
-<div class="app-version-footer">Build Version: V1.4.3</div>
+<div class="app-version-footer">Build Version: V1.4.4</div>
 
 <script>
 const hinDict = {
@@ -240,10 +240,11 @@ function doQuery() {
 
 
 // ==========================================
-// 【V1.4.3 终极版】同步唤醒机制（完美兼容微信）与全简体字修正
+// 【V1.4.4 全兼容版】双引擎智能切换机制（完美解决微信无反应问题）
 // ==========================================
 let currentReadingType = null;
-let currentUtterance = null; // 提升至全局变量，锁定引用防止被微信 GC 回收
+let currentUtterance = null; // 用于普通浏览器原生语音
+let ttsAudio = null;         // 【核心新增】用于微信环境的网络音频语音
 
 function toggleTTS(type) {
     // 如果点击的是当前正在朗读的模块，则执行停止
@@ -252,10 +253,9 @@ function toggleTTS(type) {
         return;
     }
     
-    // 先同步停止之前的朗读
+    // 先同步停止之前的朗读（无论是原生还是网络音频）
     stopSpeech();
     
-    // 必须在点击事件的当前同步线程中立即调用 speak()，才能100%突破微信和 iOS WebView 的手势拦截机制
     let textToRead = "";
     const resNameText = document.getElementById('res-name').innerText;
     const resCatText = document.getElementById('res-cat').innerText;
@@ -270,45 +270,90 @@ function toggleTTS(type) {
     
     if (!textToRead) return;
     
-    // 过滤特殊符号与换行，规避部分老旧安卓语音引擎的解析错位
+    // 过滤特殊符号与换行
     textToRead = textToRead.replace(/·/g, "").replace(/\n/g, " ");
     
-    try {
-        currentUtterance = new SpeechSynthesisUtterance(textToRead);
-        currentUtterance.lang = 'zh-CN';
-        currentUtterance.rate = 1.1; // 适当加速
-        
-        currentUtterance.onend = function() {
+    // 【关键环境检测】判断是否在微信内部打开，或者系统根本不支持原生语音
+    const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+    const useAudioFallback = isWeChat || !window.speechSynthesis || !window.SpeechSynthesisUtterance;
+    
+    // 先改变按钮状态为停止，给予用户即时视觉反馈
+    currentReadingType = type;
+    const activeBtn = document.getElementById(`tts-${type}-btn`);
+    if (activeBtn) {
+        activeBtn.innerText = "🛑 停止";
+        activeBtn.classList.add('playing');
+    }
+    
+    if (useAudioFallback) {
+        // ==========================================
+        // 引擎 A：微信专用——HTML5 网络音频引擎
+        // ==========================================
+        try {
+            if (!ttsAudio) {
+                ttsAudio = new Audio();
+            }
+            // 对接国内极速稳定的百度免费语音接口，spd=6（语速略微加速，体验极佳）
+            ttsAudio.src = "https://tts.baidu.com/text2audio?lan=zh&ie=UTF-8&spd=6&tex=" + encodeURIComponent(textToRead);
+            
+            ttsAudio.onended = function() {
+                stopSpeech();
+            };
+            ttsAudio.onerror = function(e) {
+                console.error("网络语音播放失败:", e);
+                stopSpeech();
+            };
+            
+            // 微信中由于是用户真实点击同步触发，audio.play() 会被完美放行
+            ttsAudio.play().catch(err => {
+                console.error("网络音频播放被拦截:", err);
+                stopSpeech();
+            });
+        } catch (err) {
+            console.error("网络语音初始化失败:", err);
             stopSpeech();
-        };
-        currentUtterance.onerror = function(e) {
-            console.error("语音引擎唤醒失败:", e);
-            stopSpeech();
-        };
-        
-        currentReadingType = type;
-        const activeBtn = document.getElementById(`tts-${type}-btn`);
-        if (activeBtn) {
-            activeBtn.innerText = "🛑 停止";
-            activeBtn.classList.add('playing');
         }
-        
-        // 同步直接唤醒，微信不再拦截
-        window.speechSynthesis.speak(currentUtterance);
-    } catch (err) {
-        console.error("语音引擎唤醒失败，执行安全降级:", err);
-        stopSpeech();
+    } else {
+        // ==========================================
+        // 引擎 B：普通浏览器——Web Speech 原生引擎
+        // ==========================================
+        try {
+            currentUtterance = new SpeechSynthesisUtterance(textToRead);
+            currentUtterance.lang = 'zh-CN';
+            currentUtterance.rate = 1.1; 
+            
+            currentUtterance.onend = function() {
+                stopSpeech();
+            };
+            currentUtterance.onerror = function(e) {
+                console.error("原生语音播放异常:", e);
+                stopSpeech();
+            };
+            
+            window.speechSynthesis.speak(currentUtterance);
+        } catch (err) {
+            console.error("原生语音唤醒失败:", err);
+            stopSpeech();
+        }
     }
 }
 
 function stopSpeech() {
+    // 1. 尝试停止原生浏览器语音
     try {
-        window.speechSynthesis.cancel();
-    } catch (e) {
-        console.error("释放通道失败:", e);
-    }
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
+    } catch (e) {}
     
-    // 繁体“朗讀”彻底修正回简体“朗读”
+    // 2. 尝试停止微信网络音频语音
+    try {
+        if (ttsAudio) {
+            ttsAudio.pause();
+        }
+    } catch (e) {}
+    
+    // 3. 恢复所有按钮状态为标准简体
     ['name', 'driver', 'public'].forEach(t => {
         const btn = document.getElementById(`tts-${t}-btn`);
         if (btn) {
@@ -318,7 +363,7 @@ function stopSpeech() {
     });
     
     currentReadingType = null;
-    currentUtterance = null; // 彻底切断引用
+    currentUtterance = null;
 }
 </script>
 </body>
