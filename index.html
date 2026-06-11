@@ -65,12 +65,7 @@
         .phone-btn { display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.1); color: #fff; padding: 12px 5px; border-radius: 10px; text-decoration: none; font-weight: bold; border: 1px solid rgba(255,255,255,0.2); font-size: 12px; }
         
         .app-version-footer { text-align: center; padding: 20px 0 10px 0; font-size: 11px; color: #abb2bf; font-family: monospace; letter-spacing: 1px; }
-    
-    /* 语音按钮升级样式 */
-    .tts-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 5px 10px; font-size: 12px; font-weight: bold; border-radius: 20px; border: 1px solid #d2d2d7; background: #f5f5f7; color: #003399; cursor: pointer; transition: all 0.2s; float: right; margin-top: -2px; }
-    .tts-btn.playing { background: #ff4d4f; color: white; border-color: #ff4d4f; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
-</style>
+    </style>
 </head>
 <body>
 
@@ -97,18 +92,18 @@
 
     <div id="result" class="result-area">
         <div class="info-section">
-            <button class="tts-btn" id="tts-name-btn" onclick="toggleTTS('name')">🔈 朗读</button><div class="label-text">Hazard Analysis / 物质解析结果</div>
+            <div class="label-text">Hazard Analysis / 物质解析结果</div>
             <div id="res-cat" class="cat-display"></div>
             <div id="res-name" style="font-weight:900; font-size:1.15rem; color: #1d1d1f; margin-top:8px; line-height:1.4;"></div>
             <div id="res-en" class="res-en-name"></div>
         </div>
         <div id="special-alert"></div>
         <div class="cmd-box">
-            <div class="cmd-head cmd-head-driver"><button class="tts-btn" id="tts-driver-btn" onclick="toggleTTS('driver')">🔈 朗读</button>⚡ 现场处置指南 (驾驶员及押运员)</div>
+            <div class="cmd-head cmd-head-driver">⚡ 现场处置指南 (驾驶员及押运员)</div>
             <div id="driver-content" class="cmd-content"></div>
         </div>
         <div class="cmd-box">
-            <div class="cmd-head cmd-head-public"><button class="tts-btn" id="tts-public-btn" onclick="toggleTTS('public')">🔈 朗读</button>🛡️ 社会避险提醒 (后方群众)</div>
+            <div class="cmd-head cmd-head-public">🛡️ 社会避险提醒 (后方群众)</div>
             <div id="public-content" class="cmd-content"></div>
         </div>
     </div>
@@ -139,7 +134,7 @@
     </div>
 </div>
 
-<div class="app-version-footer">Build Version: V1.4.1</div>
+<div class="app-version-footer">Build Version: V1.3.0</div>
 
 <script>
 const hinDict = {
@@ -236,71 +231,6 @@ function doQuery() {
     driverArea.innerHTML = `<div style="margin-bottom:12px;"><span class="step-title">1. 平时停车要求</span>${Array.from(pTips).join('<br>')}</div><div style="margin-bottom:12px;"><span class="step-title">2. 发现漏液/冒烟</span>${Array.from(lTips).join('<br>')}</div><div><span class="step-title">3. 火灾/爆炸危险</span>${Array.from(fTips).join('<br>')}</div>`;
     publicArea.innerHTML = Array.from(pbTips).join('<br>');
     setTimeout(() => { window.scrollTo({ top: document.getElementById('result').offsetTop - 20, behavior: 'smooth' }); }, 100);
-}
-
-let currentReadingType = null;
-
-// 在执行新查询或者重置按钮时切断发声
-const originalResetBtn = resetBtn;
-resetBtn = function() {
-    originalResetBtn();
-    stopSpeech();
-};
-
-const originalDoQuery = doQuery;
-doQuery = function() {
-    stopSpeech();
-    originalDoQuery();
-};
-
-function toggleTTS(type) {
-    if (currentReadingType === type) {
-        stopSpeech();
-        return;
-    }
-    stopSpeech();
-    
-    let textToRead = "";
-    const resNameText = document.getElementById('res-name').innerText;
-    const resCatText = document.getElementById('res-cat').innerText;
-    
-    if (type === 'name') {
-        textToRead = "物质解析结果：" + resCatText + "。" + (resNameText.includes("暂未入库") ? "该物质暂未入库" : "物质品名为：" + resNameText);
-    } else if (type === 'driver') {
-        textToRead = "现场处置指南：" + document.getElementById('driver-content').innerText;
-    } else if (type === 'public') {
-        textToRead = "社会避险提醒：" + document.getElementById('public-content').innerText;
-    }
-    
-    if (!textToRead) return;
-    textToRead = textToRead.replace(/·/g, "").replace(/\n/g, " ");
-    
-    const utterance = new SpeechSynthesisUtterance(textToRead);
-    utterance.lang = 'zh-CN';
-    utterance.rate = 1.1;
-    
-    utterance.onend = stopSpeech;
-    utterance.onerror = stopSpeech;
-    
-    currentReadingType = type;
-    const activeBtn = document.getElementById(`tts-${type}-btn`);
-    if (activeBtn) {
-        activeBtn.innerText = "🛑 停止";
-        activeBtn.classList.add('playing');
-    }
-    window.speechSynthesis.speak(utterance);
-}
-
-function stopSpeech() {
-    window.speechSynthesis.cancel();
-    ['name', 'driver', 'public'].forEach(t => {
-        const btn = document.getElementById(`tts-${t}-btn`);
-        if (btn) {
-            btn.innerText = "🔈 朗读";
-            btn.classList.remove('playing');
-        }
-    });
-    currentReadingType = null;
 }
 </script>
 </body>
